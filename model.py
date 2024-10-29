@@ -48,6 +48,7 @@ class CausalSelfAttention(nn.Module):
         self.dropout = config.dropout
         # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
         self.flash = hasattr(torch.nn.functional, "scaled_dot_product_attention")
+
         if not self.flash:
             print(
                 "WARNING: using slow attention. Flash Attention requires PyTorch >= 2.0"
@@ -126,7 +127,7 @@ class FrostQuantixAttention(nn.Module):
         self.flash = hasattr(torch.nn.functional, "scaled_dot_product_attention")
         if not self.flash:
             print("WARNING: Flash Attention requires PyTorch >= 2.0. Falling back to manual implementation.")
-        
+
         # Relative positional encoding
         self.max_seq_len = config.block_size
         self.rel_pos_enc = nn.Embedding(2 * config.block_size - 1, self.head_dim)
