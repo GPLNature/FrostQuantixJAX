@@ -2,7 +2,7 @@ import os
 import time
 from enums import InitFrom
 from model import FQConfig, FrostQuantix
-from utils import download_file, get_batch, get_lr
+from utils import download_file, estimate_loss, get_batch, get_lr
 from flax.training import checkpoints
 import jax 
 import jax.numpy as jnp
@@ -67,6 +67,11 @@ running_mfu = -1.0
 
 ### End Static Variables
 
+### Config
+config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
+config = {k: globals()[k] for k in config_keys}
+###
+
 print("Using HuggingFace binaries...")
 download_file('https://huggingface.co/datasets/VatsaDev/TinyText/resolve/main/valtotal1.bin','valtotal.bin')
 download_file('https://huggingface.co/datasets/VatsaDev/TinyText/resolve/main/traintotal1.bin', 'traintotal.bin')
@@ -124,3 +129,44 @@ while True:
     lr = get_lr(iter_num, warmup_iters, learning_rate, lr_decay_iters, min_lr) if decay_lr else learning_rate
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    
+    if iter_num % eval_interval == 0:
+        losses = estimate_loss()
+        print(f"Step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        
+        if losses['val'] < best_val_loss or always_save_checkpoint:
+            best_val_loss = losses['val']
+            if iter_num > 0:
+                checkpoint = {
+                    model: model.state_dict(),
+                    optimizer: optimizer.state_dict(),
+                    model_args: model_args,
+                    iter_num: iter_num,
+                    best_val_loss: best_val_loss,
+                    config: config
+                }
+                print(f"Saving checkpoint to {out_dir}")
+                jnp.save(checkpoint, os.path.join(out_dir, 'checkpoint.pt'))
+    
+    if iter_num == 0 and eval_only:
+        break
+
+    for micro_step in range(gradient_accumulation_steps):
+        logits, loss = model(x, y)
+        loss = loss / gradient_accumulation_steps
+
+        x, y = get_batch('train', train_data, val_data, block_size, batch_size, device)
+    
+    optimizer.zero_grad(set_to_none = True)
+
+    mfu = -1.0
+    t1 = time.time()
+    dt = t1 - t0
+    t0 = t1
+
+    if iter_num % log_interval == 0:
+        lossf = loss.item() * gradient_accumulation_steps
+        
+        if local_iter_num >= 5:
+            mfu = model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
+    
