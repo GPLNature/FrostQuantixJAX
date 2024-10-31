@@ -252,8 +252,6 @@ def estimate_loss():
                 logits, loss = model(X, Y)
             if loss is not None:
                 losses[k] = loss.item()
-            else :
-                losses[k] = -1
         out[split] = losses.mean()
     model.train()
     return out

@@ -280,6 +280,14 @@ class FrostQuantix(nn.Module):
         # report number of parameters
         print("number of parameters: %.2fM" % (self.get_num_params() / 1e6,))
 
+    def _init_weights(self, module):
+         if isinstance(module, nn.Linear):
+             nn.init.xavier_uniform_(module.weight)
+             if module.bias is not None:
+                 nn.init.constant_(module.bias, 0)
+         elif isinstance(module, nn.Embedding):
+             nn.init.xavier_uniform_(module.weight)
+
     def get_num_params(self, non_embedding=True):
         """
         Return the number of parameters in the model.
@@ -291,14 +299,6 @@ class FrostQuantix(nn.Module):
         if non_embedding:
             n_params -= self.transformer.wpe.weight.numel()
         return n_params
-
-    def _init_weights(self, module):
-         if isinstance(module, nn.Linear):
-             nn.init.xavier_uniform_(module.weight)
-             if module.bias is not None:
-                 nn.init.constant_(module.bias, 0)
-         elif isinstance(module, nn.Embedding):
-             nn.init.xavier_uniform_(module.weight)
 
     def forward(self, idx, targets=None):
         device = idx.device
